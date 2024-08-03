@@ -27,7 +27,7 @@ from concurrent import futures
 from vaxpress.data.codon_usage_data import codon_usage
 from vaxpress.data.bicodon_usage_data import bicodon_usage
 from itertools import product
-import inspect
+from functools import partial
 import numpy as np
 import pandas as pd
 import linearfold as lf
@@ -64,6 +64,20 @@ def calc_bicodon_cai(codon_usage):
     return log_weights
 
 bicodon_cai_weights = calc_bicodon_cai(bicodon_usage['Homo sapiens'])
+
+
+def calc_weighted_aup(__name, seq, lengths, folding, weights):
+    seqbases = np.frombuffer(seq.encode(), dtype='i1')
+    unpairprob_bypos = 1 - folding['bpp'].sum(axis=1).clip(0, 1)
+
+    total = weightsum = 0.0
+    for base, baseweight in weights.items():
+        matches = (seqbases == ord(base))
+        total += unpairprob_bypos[matches].sum() * baseweight
+        weightsum += matches.sum() * baseweight
+
+    return total / weightsum
+
 
 class EvaluateSequences:
 
@@ -124,7 +138,8 @@ class EvaluateSequences:
                 method = getattr(self, name)
                 handlers[name[len('metric_'):]] = {
                     'handler': method,
-                    'take_folding': 'folding' in inspect.getfullargspec(method).args
+                    'take_folding': getattr(method, '__requires_folding__', False),
+                    'blacklist': getattr(method, '__blacklist__', []),
                 }
         return handlers
 
@@ -163,11 +178,10 @@ class EvaluateSequences:
                 continue
 
             for fold_type, folding in foldings.items():
-                hdl = handler['handler']
-                if hasattr(hdl, '__blacklist__') and fold_type in hdl.__blacklist__:
+                if fold_type in handler['blacklist']:
                     continue
 
-                value = hdl(name, seq, lengths, folding)
+                value = handler['handler'](name, seq, lengths, folding)
                 yield (metric_name, fold_type, value)
 
     def fold(self, seq):
@@ -181,6 +195,7 @@ class EvaluateSequences:
         lpbpp = foldings['LinearPartition']['bpp']
         bpp = np.zeros((len(seq), len(seq)), dtype='f8')
         bpp[lpbpp['i'], lpbpp['j']] = lpbpp['prob']
+        bpp += bpp.T
         foldings['LinearPartition']['bpp'] = bpp
 
         fold, fe = RNA.fold(seq)
@@ -200,6 +215,7 @@ class EvaluateSequences:
 
     def metric_free_energy(self, name, seq, lengths, folding):
         return folding['free_energy']
+    metric_free_energy.__requires_folding__ = True
 
     def metric_log2_single_cai(self, name, seq, lengths):
         cds = seq[lengths[0]:lengths[0]+lengths[1]]
@@ -216,7 +232,31 @@ class EvaluateSequences:
     def metric_degscore(self, name, seq, lengths, folding):
         # This returns the original DegScore sum, not divided by sequence length
         return DegScore.DegScore(seq, structure=folding['structure']).degscore
+    metric_degscore.__requires_folding__ = True
     metric_degscore.__blacklist__ = ['ViennaRNA:partition']
+
+    #__metric_aup.__blacklist__ = ['LinearFold', 'ViennaRNA:fold']
+
+    metric_aup_unweighted = partial(calc_weighted_aup, weights={
+        'A': 1.0, 'C': 1.0, 'G': 1.0, 'U': 1.0})
+
+    metric_aup_U3A2 = partial(calc_weighted_aup, weights={
+        'A': 2.0, 'C': 1.0, 'G': 1.0, 'U': 3.0})
+
+    metric_aup_U5A2 = partial(calc_weighted_aup, weights={
+        'A': 2.0, 'C': 1.0, 'G': 1.0, 'U': 5.0})
+
+    metric_aup_U3A1GC0 = partial(calc_weighted_aup, weights={
+        'A': 1.0, 'C': 0.0, 'G': 0.0, 'U': 3.0})
+
+    metric_aup_U1AGC0 = partial(calc_weighted_aup, weights={
+        'A': 0.0, 'C': 0.0, 'G': 0.0, 'U': 1.0})
+
+    for func in (metric_aup_unweighted, metric_aup_U3A2, metric_aup_U5A2,
+                 metric_aup_U3A1GC0, metric_aup_U1AGC0):
+        func.__requires_folding__ = True
+        func.__blacklist__ = ['ViennaRNA:fold', 'LinearFold']
+
 
 EvaluateSequences(snakemake.input.cds, snakemake.input.utr,
                   snakemake.output[0]).run(snakemake.threads)
