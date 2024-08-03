@@ -1,0 +1,8 @@
+linearfold-unofficial
+linearpartition-unofficial
+vaxpress
+biopython
+pandas
+numpy
+scikit-learn
+snakemake
