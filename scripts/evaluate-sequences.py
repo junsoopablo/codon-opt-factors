@@ -33,6 +33,11 @@ import pandas as pd
 import linearfold as lf
 import linearpartition as lp
 import RNA
+import sys
+
+sys.stdout, stdout_orig = open('/dev/null', 'w'), sys.stdout
+import DegScore # suppress warning message during the import
+sys.stdout = stdout_orig
 
 def calc_single_codon_cai(codon_usage, codon_table):
     codon2aa = codon_table.forward_table.copy()
@@ -45,7 +50,6 @@ def calc_single_codon_cai(codon_usage, codon_table):
 
     log_weights = {}
     for aa, codons in tbl.groupby('aa'):
-        codons = codons.copy()
         log_weights.update(np.log2(codons['freq'] / codons['freq'].max()).to_dict())
 
     return log_weights
@@ -159,7 +163,11 @@ class EvaluateSequences:
                 continue
 
             for fold_type, folding in foldings.items():
-                value = handler['handler'](name, seq, lengths, folding)
+                hdl = handler['handler']
+                if hasattr(hdl, '__blacklist__') and fold_type in hdl.__blacklist__:
+                    continue
+
+                value = hdl(name, seq, lengths, folding)
                 yield (metric_name, fold_type, value)
 
     def fold(self, seq):
@@ -183,7 +191,7 @@ class EvaluateSequences:
         bpp = np.array(fc.bpp())[1:, 1:]
         bpp += bpp.T
         foldings['ViennaRNA:partition'] = {
-            'structure': fold.replace(',', '.').replace('{', '(').replace('}', ')'),
+            'structure': fold.replace(',', '.').replace('{', '(').replace('}', ')').replace('|', '.'),
             'free_energy': fe,
             'bpp': bpp,
         }
@@ -205,6 +213,10 @@ class EvaluateSequences:
             bicodon_cai_weights[cds[i:i+6]] for i in range(0, len(cds) - 3, 3)])
         return logwmean
 
+    def metric_degscore(self, name, seq, lengths, folding):
+        # This returns the original DegScore sum, not divided by sequence length
+        return DegScore.DegScore(seq, structure=folding['structure']).degscore
+    metric_degscore.__blacklist__ = ['ViennaRNA:partition']
 
 EvaluateSequences(snakemake.input.cds, snakemake.input.utr,
                   snakemake.output[0]).run(snakemake.threads)
