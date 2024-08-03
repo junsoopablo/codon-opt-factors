@@ -25,6 +25,8 @@ from Bio import SeqIO
 from Bio.Data import CodonTable
 from concurrent import futures
 from vaxpress.data.codon_usage_data import codon_usage
+from vaxpress.data.bicodon_usage_data import bicodon_usage
+from itertools import product
 import inspect
 import numpy as np
 import pandas as pd
@@ -50,6 +52,14 @@ def calc_single_codon_cai(codon_usage, codon_table):
 
 single_cai_weights = calc_single_codon_cai(codon_usage['Homo sapiens'],
                                            CodonTable.standard_rna_table)
+
+
+def calc_bicodon_cai(codon_usage):
+    pairs = [''.join(seq) for seq in product('ACGU', repeat=6)]
+    log_weights = dict(zip(pairs, codon_usage))
+    return log_weights
+
+bicodon_cai_weights = calc_bicodon_cai(bicodon_usage['Homo sapiens'])
 
 class EvaluateSequences:
 
@@ -183,11 +193,17 @@ class EvaluateSequences:
     def metric_free_energy(self, name, seq, lengths, folding):
         return folding['free_energy']
 
-    def metric_cai(self, name, seq, lengths):
+    def metric_log2_single_cai(self, name, seq, lengths):
         cds = seq[lengths[0]:lengths[0]+lengths[1]]
         logwmean = np.mean([
             single_cai_weights[cds[i:i+3]] for i in range(0, len(cds), 3)])
-        return 2 ** logwmean
+        return logwmean
+
+    def metric_log2_bicodon_cai(self, name, seq, lengths):
+        cds = seq[lengths[0]:lengths[0]+lengths[1]]
+        logwmean = np.mean([
+            bicodon_cai_weights[cds[i:i+6]] for i in range(0, len(cds) - 3, 3)])
+        return logwmean
 
 
 EvaluateSequences(snakemake.input.cds, snakemake.input.utr,
