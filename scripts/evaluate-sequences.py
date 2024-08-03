@@ -24,6 +24,7 @@
 from Bio import SeqIO
 from concurrent import futures
 import inspect
+import numpy as np
 import pandas as pd
 import linearfold as lf
 import linearpartition as lp
@@ -132,12 +133,27 @@ class EvaluateSequences:
         foldings = {}
 
         fold, fe = lf.fold(seq)
-        foldings['lf'] = {'structure': fold, 'free_energy': fe}
+        foldings['LinearFold'] = {'structure': fold, 'free_energy': fe}
 
-        foldings['lp'] = lp.partition(seq)
+        foldings['LinearPartition'] = lp.partition(seq)
+        # Convert list of non-zero probs to a matrix
+        lpbpp = foldings['LinearPartition']['bpp']
+        bpp = np.zeros((len(seq), len(seq)), dtype='f8')
+        bpp[lpbpp['i'], lpbpp['j']] = lpbpp['prob']
+        foldings['LinearPartition']['bpp'] = bpp
 
         fold, fe = RNA.fold(seq)
-        foldings['v'] = {'structure': fold, 'free_energy': fe}
+        foldings['ViennaRNA:fold'] = {'structure': fold, 'free_energy': fe}
+
+        fc = RNA.fold_compound(seq)
+        fold, fe = fc.pf()
+        bpp = np.array(fc.bpp())[1:, 1:]
+        bpp += bpp.T
+        foldings['ViennaRNA:partition'] = {
+            'structure': fold.replace(',', '.').replace('{', '(').replace('}', ')'),
+            'free_energy': fe,
+            'bpp': bpp,
+        }
 
         return foldings
 
