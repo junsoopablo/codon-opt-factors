@@ -22,13 +22,34 @@
 # 
 
 from Bio import SeqIO
+from Bio.Data import CodonTable
 from concurrent import futures
+from vaxpress.data.codon_usage_data import codon_usage
 import inspect
 import numpy as np
 import pandas as pd
 import linearfold as lf
 import linearpartition as lp
 import RNA
+
+def calc_single_codon_cai(codon_usage, codon_table):
+    codon2aa = codon_table.forward_table.copy()
+    for c in codon_table.stop_codons:
+        codon2aa[c] = '*'
+
+    tbl = pd.DataFrame({
+        'freq': pd.Series(codon_usage),
+        'aa': pd.Series(codon2aa)})
+
+    log_weights = {}
+    for aa, codons in tbl.groupby('aa'):
+        codons = codons.copy()
+        log_weights.update(np.log2(codons['freq'] / codons['freq'].max()).to_dict())
+
+    return log_weights
+
+single_cai_weights = calc_single_codon_cai(codon_usage['Homo sapiens'],
+                                           CodonTable.standard_rna_table)
 
 class EvaluateSequences:
 
@@ -37,6 +58,7 @@ class EvaluateSequences:
         self.utr_file = utr_file 
         self.output_file = output_file
 
+        self.cache = {}
         self.metric_handlers = self.scan_metric_handlers()
 
         self.load_sequences(cds_file, utr_file)
@@ -124,6 +146,7 @@ class EvaluateSequences:
             if not handler['take_folding']:
                 value = handler['handler'](name, seq, lengths)
                 yield (metric_name, None, value)
+                continue
 
             for fold_type, folding in foldings.items():
                 value = handler['handler'](name, seq, lengths, folding)
@@ -159,6 +182,12 @@ class EvaluateSequences:
 
     def metric_free_energy(self, name, seq, lengths, folding):
         return folding['free_energy']
+
+    def metric_cai(self, name, seq, lengths):
+        cds = seq[lengths[0]:lengths[0]+lengths[1]]
+        logwmean = np.mean([
+            single_cai_weights[cds[i:i+3]] for i in range(0, len(cds), 3)])
+        return 2 ** logwmean
 
 
 EvaluateSequences(snakemake.input.cds, snakemake.input.utr,
