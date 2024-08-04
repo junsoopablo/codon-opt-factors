@@ -257,6 +257,30 @@ class EvaluateSequences:
         func.__requires_folding__ = True
         func.__blacklist__ = ['ViennaRNA:fold', 'LinearFold']
 
+    def metric_unpaired_U(self, name, seq, lengths, folding):
+        return sum((base == 'U' and pair == '.')
+                   for base, pair in zip(seq, folding['structure']))
+    metric_unpaired_U.__requires_folding__ = True
+
+    def metric_unpaired_A(self, name, seq, lengths, folding):
+        return sum((base == 'A' and pair == '.')
+                   for base, pair in zip(seq, folding['structure']))
+    metric_unpaired_A.__requires_folding__ = True
+
+    def metric_unpaired_G(self, name, seq, lengths, folding):
+        return sum((base == 'G' and pair == '.')
+                   for base, pair in zip(seq, folding['structure']))
+    metric_unpaired_G.__requires_folding__ = True
+
+    def metric_unpaired_C(self, name, seq, lengths, folding):
+        return sum((base == 'C' and pair == '.')
+                   for base, pair in zip(seq, folding['structure']))
+    metric_unpaired_C.__requires_folding__ = True
+
+    def metric_total_loop_size(self, name, seq, lengths, folding):
+        return sum(pair == '.' for pair in folding['structure'])
+    metric_total_loop_size.__requires_folding__ = True
+
 
 EvaluateSequences(snakemake.input.cds, snakemake.input.utr,
                   snakemake.output[0]).run(snakemake.threads)
