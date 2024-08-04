@@ -32,13 +32,31 @@ import numpy as np
 import pandas as pd
 import linearfold as lf
 import linearpartition as lp
+import warnings
 import re
+import os
 import RNA
 import sys
 
 sys.stdout, stdout_orig = open('/dev/null', 'w'), sys.stdout
 import DegScore # suppress warning message during the import
 sys.stdout = stdout_orig
+
+try:
+    import rpy2.robjects.packages as rpackages
+    rpackages.importr('iCodon')
+    rpackages.importr('stringr')
+except (ModuleNotFoundError, rpackages.PackageNotInstalledError):
+    iCodon_installed = False
+    warnings.warn('iCodon R package not found. '
+                  'Try: mamba install -c ChangLabSNU -c bioconda r-icodon-light rpy2')
+else:
+    iCodon_installed = True
+
+    import rpy2.robjects as ro
+    os.environ['TZ'] = 'UTC' # dplyr requires this to run in singularity
+    ro.r['options'](warn=-1)
+    iCodon_predict_stability = ro.r['predict_stability']('human')
 
 
 FOLDER_VIENNARNA_FOLD = 'ViennaRNA:fold'
@@ -488,6 +506,11 @@ class EvaluateSequences:
 
     def metric_total_basecount_C(self, name, seq, lengths):
         return sum(base == 'C' for base in seq)
+
+    if iCodon_installed:
+        def metric_icodon_stability(self, name, seq, lengths):
+            cds = seq[lengths[0]:lengths[0]+lengths[1]]
+            return float(iCodon_predict_stability([cds])[0])
 
 
 EvaluateSequences(snakemake.input.cds, snakemake.input.utr,
