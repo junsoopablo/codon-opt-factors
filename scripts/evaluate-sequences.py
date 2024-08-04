@@ -408,34 +408,71 @@ class EvaluateSequences:
         return sum(map(len, re.findall(r'\((\.+)\)', folding['structure'])))
 
     @requires(CAPABILITY_FOLDING)
+    def metric_total_hairpin_loop_count(self, name, seq, lengths, folding):
+        return len(re.findall(r'\(\.+\)', folding['structure']))
+
+    @staticmethod
+    def find_hairpin_loop_sequences(seq, structure):
+        for matches in re.finditer(r'\((\.+)\)', structure):
+            yield seq[slice(*matches.span(1))]
+
+    @requires(CAPABILITY_FOLDING)
     def metric_total_hairpin_loop_U(self, name, seq, lengths, folding):
-        basetype = 'U'
-        return sum(seq[slice(*match.span(1))].count(basetype)
-                   for match in re.finditer(r'\((\.+)\)', folding['structure']))
+        return sum(seq.count('U') for seq
+                   in self.find_hairpin_loop_sequences(seq, folding['structure']))
 
     @requires(CAPABILITY_FOLDING)
     def metric_total_hairpin_loop_A(self, name, seq, lengths, folding):
-        basetype = 'A'
-        return sum(seq[slice(*match.span(1))].count(basetype)
-                   for match in re.finditer(r'\((\.+)\)', folding['structure']))
+        return sum(seq.count('A') for seq
+                   in self.find_hairpin_loop_sequences(seq, folding['structure']))
 
     @requires(CAPABILITY_FOLDING)
     def metric_total_hairpin_loop_G(self, name, seq, lengths, folding):
-        basetype = 'G'
-        return sum(seq[slice(*match.span(1))].count(basetype)
-                   for match in re.finditer(r'\((\.+)\)', folding['structure']))
+        return sum(seq.count('G') for seq
+                   in self.find_hairpin_loop_sequences(seq, folding['structure']))
 
     @requires(CAPABILITY_FOLDING)
     def metric_total_hairpin_loop_C(self, name, seq, lengths, folding):
-        basetype = 'C'
-        return sum(seq[slice(*match.span(1))].count(basetype)
-                   for match in re.finditer(r'\((\.+)\)', folding['structure']))
+        return sum(seq.count('C') for seq
+                   in self.find_hairpin_loop_sequences(seq, folding['structure']))
 
     @requires(CAPABILITY_FOLDING)
     def metric_total_bulge_length(self, name, seq, lengths, folding):
-        return (
-            sum(map(len, re.findall(r'\((\.+)\(', folding['structure']))) +
-            sum(map(len, re.findall(r'\)(\.+)\)', folding['structure']))))
+        return sum(
+            len(lmatch) + len(rmatch) for lmatch, rmatch
+            in re.findall(r'\((\.+)\(|\)(\.+)\)', folding['structure']))
+
+    @requires(CAPABILITY_FOLDING)
+    def metric_total_bulge_count(self, name, seq, lengths, folding):
+        return len(re.findall(r'\((\.+)\(|\)(\.+)\)', folding['structure']))
+
+    @staticmethod
+    def find_bulge_sequences(seq, structure):
+        for matches in re.finditer(r'\((\.+)\(|\)(\.+)\)', structure):
+            span = matches.span(1)
+            if span[0] < 0:
+                span = matches.span(2)
+            yield seq[slice(*span)]
+
+    @requires(CAPABILITY_FOLDING)
+    def metric_total_bulge_U(self, name, seq, lengths, folding):
+        return sum(seq.count('U') for seq
+                   in self.find_bulge_sequences(seq, folding['structure']))
+
+    @requires(CAPABILITY_FOLDING)
+    def metric_total_bulge_A(self, name, seq, lengths, folding):
+        return sum(seq.count('A') for seq
+                   in self.find_bulge_sequences(seq, folding['structure']))
+
+    @requires(CAPABILITY_FOLDING)
+    def metric_total_bulge_G(self, name, seq, lengths, folding):
+        return sum(seq.count('G') for seq
+                   in self.find_bulge_sequences(seq, folding['structure']))
+
+    @requires(CAPABILITY_FOLDING)
+    def metric_total_bulge_C(self, name, seq, lengths, folding):
+        return sum(seq.count('C') for seq
+                   in self.find_bulge_sequences(seq, folding['structure']))
 
 
     ## Base count metrics
