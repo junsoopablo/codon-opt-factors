@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 #
 # Copyright (c) 2024 Seoul National University
 #
@@ -20,6 +19,15 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
+
+
+import argparse
+
+parser = argparse.ArgumentParser(description="Evaluate sequences with codon usage and structural features.")
+parser.add_argument('--cds', required=True, help='Path to CDS FASTA file')
+parser.add_argument('--utr', required=True, help='Path to UTR FASTA file')
+parser.add_argument('--output', required=True, help='Output TSV file path')
+args = parser.parse_args()
 
 from Bio import SeqIO
 from Bio.Data import CodonTable
@@ -513,5 +521,6 @@ class EvaluateSequences:
             return float(iCodon_predict_stability([cds])[0])
 
 
-EvaluateSequences(snakemake.input.cds, snakemake.input.utr,
-                  snakemake.output[0]).run(snakemake.threads)
+EvaluateSequences(args.cds, args.utr,
+                  args.output).run(1)
+
